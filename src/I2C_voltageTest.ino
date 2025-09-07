@@ -22,7 +22,7 @@ const int NUM_TEST_POINTS = 5;
 void setup(){
     Serial.begin(9600); //starts serial comms at 9600 bits per sec
     Wire.begin(); //Initalizes the I2C System
-    delay(2000); //avoide buffer overlap 
+    delay(2000); //avoid buffer overlap 
 
     Serial.println("Testing voltage output at different DAC values");
     Serial.println("Measure VOUT pin with multimeter to verify");
@@ -51,7 +51,6 @@ void loop(){
   Serial.println(")");
   */
 Serial.print("Target Voltage: ");
-// ... rest of your code
     Serial.print("Target Voltage: ");
     Serial.print(targetVoltage, 2); //target voltage 2 decimal places 
     Serial.print("V | DAC: ");  
