@@ -36,11 +36,13 @@ void setup(){
     custom_init() //call our custom function to initialize our two pins 
     Serial.println("Pins initalized");
 
+    
 
 
 } 
 
 void loop(){
+
 
 }
 /*starting by building the wire library functions from the ground up using my 
@@ -75,12 +77,91 @@ void custom_stop(){ //stop condition for I2C protocol
     digitalWrite(SDA_PIN, LOW);
     digitalWrite(SCL_PIN, LOW);
 
-    //need to set SDA from L to H while SCL is H for our start condition 
+    //need to set SDA from L to H while SCL is H for our end condition 
     //SCL high first 
     digitalWrite(SCL_PIN, HIGH);
     delayMicroseconds(MY_DELAY);
     //SDA high next 
     digitalWrite(SDA_PIN, HIGH);
     delayMicroseconds(MY_DELAY);
+}
+
+void custom_write_bit(uint8_t bit){//this function will bring SDA to high while SCL is low 
+    digitalWrite(SDA_PIN, bit ? HIGH : LOW);//if bit is 1 SDA set to high otherwise low 
+    delayMicroseconds(MY_DELAY);
+
+    digitalWrite(SCL_PIN, HIGH); //SCL then reads the input 
+    delayMicroseconds(MY_DELAY);
+
+    digitalWrite(SCL_PIN, LOW); //set to low then ready for next input 
+    delayMicroseconds(MY_DELAY);
+}
+
+bool custom_write_byte(uint8_t data){
+    //send eight bits(byte) using our new write bit 
+    for(i = 7; i >= 0, i--){
+        uint8_t bit = (data >> i) & 1;//shift by whatever our i value is and masking everything but the lowest bit we just shifted to 
+        custom_write_bit(bit); //utilize our new function 
+    }
+    //we then need to read this bit from the slave 
+    return custom_read_ack();
+}
+
+bool custom_read_ack(){
+    //release SDA line 
+    pinMode(SDA_PIN, INPUT); 
+    digitalWrite(SDA_PIN, HIGH); //internal pullup now 
+    delayMicroseconds(MY_DELAY);
+
+    digtialWrite(SCL_PIN, HIGH);//CLK is now high and slave will pull SDA LOW 
+    delayMicroseconds(MY_DELAY);
+
+    bool ack_received = (digitalRead(SDA_PIN) == LOW);//LOW = is ACK otherwise if HIGH = NACK 
+    
+    digtialWrite(SCL_PIN, LOW);
+
+    //now we need to take back control over the SDA line 
+    digitalWrite(SDA_PIN, OUTPUT);
+    digitalWrite(SDA_PIN, LOW);
+    delayMicroseconds(MY_DELAY);
+
+    return ack_received;//give us our value for if the byte was read or not 
+}
+
+bool custom_test(uint8_t device_address){
+    custom_start(); //start condition for our I2C comms 
+
+    //want to test our connection to the board so we send address with one write bit 
+    uint8_t addr_byte = (device_address << 1) | 0; 
+    bool ack = custom_write_byte(addr_byte);  //stores in ack the result of ack_recieved if our value was read or not 1 or 0
+
+    custom_stop();
+    return ack; //return the 1 or 0 (true or false)
+}
+
+bool custom_set_voltage(uint16_t dac_value) { //function goes throught the full protocol and only returns true if every byte is ACK
+
+  dac_value &= 0x0FFF;// Ensure 12-bit value by masking 
+  custom_start();//start condition for our IC2 comms 
+  
+  if (!custom_write_byte((MCP4725_ADDRESS << 1) | 0)) {   // Send device address + write bit
+    custom_stop();
+    return false;  // Device didn't ACK address
+  }
+  
+  if (!custom_write_byte((dac_value >> 8) & 0x0F)) {   // Send upper 4 bits of DAC value
+    custom_stop();
+    return false;  // Device didn't ACK data byte 1
+  }
+  
+  // Send lower 8 bits of DAC value
+  if (!custom_write_byte(dac_value & 0xFF)) {
+    custom_stop();
+    return false;  // Device didn't ACK data byte 2
+  }
+  
+  custom_stop(); 
+  
+  return true;  //function worked 
 }
 
