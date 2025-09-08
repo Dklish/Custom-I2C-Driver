@@ -8,19 +8,19 @@ start writing the custom I2C Driver
 the SDA and SCL lines so no need to import the wire library 
 -Since we dont need specific analog pins we will define our SDA pin as 1 and SCL pin as 0 
 Hardware setup:
-Arduino 1   → MCP4725 SDA
-Arduino 0   → MCP4725 SCL  
+Arduino 2   → MCP4725 SDA
+Arduino 3   → MCP4725 SCL  
 Arduino 5V  → MCP4725 VDD
 Arduino GND → MCP4725 GND
 Author: Diego Klish 
 */
 
 //first define our custom pins for SDA and SCL 
-#define SDA_PIN 1;
-#define SCL_PIN 0;
+#define SDA_PIN 2
+#define SCL_PIN 3
 //for custom driver yes could make it faster with smaller delays but wiring would need to be perfect 
-#define MY_DELAY 10; //standard timing delay 
-#define I2C_MAX_WAIT 1000; //just a diffirent increment for fun 
+#define MY_DELAY 10 //standard timing delay 
+#define I2C_MAX_WAIT 1000 //just a diffirent increment for fun 
 
 const uint8_t MCP4725_ADDRESS = 0x60; //define constant value for MCP4725 address 
 const uint16_t DAC_MAX_VALUE = 4095; //max DAC value 
@@ -33,18 +33,45 @@ const int NUM_TEST_POINTS = 5; //number of cases
 void setup(){
     Serial.begin(9600);
     
-    custom_init() //call our custom function to initialize our two pins 
+    custom_init(); //call our custom function to initialize our two pins 
     Serial.println("Pins initalized");
 
-    
-
-
+    if(custom_test(MCP4725_ADDRESS)){ //uses custom test to see if connction is working 
+    Serial.print("MCP4725 working with custom driver");
+    }
+    else{
+        Serial.print("MCP4725 is not working with custom driver");
+        while(1); //stops program while custom test is not working to ensure good connection 
+    }
 } 
 
 void loop(){
-
-
+    for (int i = 0; i < NUM_TEST_POINTS; i++) {//essentially the same test as our voltage test but this time using our custom drivers 
+    float targetVoltage = VOLTAGES[i]; //starts with voltage array value 0 and goes up each iteration 
+    uint16_t dacValue = voltageToDACValue(targetVoltage);//stores the result of our target voltage converted into a dac value
+    
+    // Use OUR custom I2C driver instead of Wire library
+    bool success = custom_set_voltage(dacValue);
+    
+    Serial.print("Target: ");
+    Serial.print(targetVoltage, 2);//2 decimal places since its a float 
+    Serial.print("V | DAC: ");
+    Serial.print(dacValue); //print dac value 
+    
+    if (success) {
+      Serial.print("Custom I2C Driver Success");
+    } else {
+      Serial.print("Custom I2C Driver Failed");
+    }
+    
+    Serial.println();
+    delay(5000);  // Hold voltage for measurement
+  }
+  
+  delay(2000);//avoid buffer 
 }
+
+
 /*starting by building the wire library functions from the ground up using my 
 knwoledge of the I2C protocol 
 */
@@ -99,7 +126,7 @@ void custom_write_bit(uint8_t bit){//this function will bring SDA to high while 
 
 bool custom_write_byte(uint8_t data){
     //send eight bits(byte) using our new write bit 
-    for(i = 7; i >= 0, i--){
+    for(int i = 7; i >= 0; i--){
         uint8_t bit = (data >> i) & 1;//shift by whatever our i value is and masking everything but the lowest bit we just shifted to 
         custom_write_bit(bit); //utilize our new function 
     }
@@ -113,15 +140,15 @@ bool custom_read_ack(){
     digitalWrite(SDA_PIN, HIGH); //internal pullup now 
     delayMicroseconds(MY_DELAY);
 
-    digtialWrite(SCL_PIN, HIGH);//CLK is now high and slave will pull SDA LOW 
+    digitalWrite(SCL_PIN, HIGH);//CLK is now high and slave will pull SDA LOW 
     delayMicroseconds(MY_DELAY);
 
     bool ack_received = (digitalRead(SDA_PIN) == LOW);//LOW = is ACK otherwise if HIGH = NACK 
     
-    digtialWrite(SCL_PIN, LOW);
+    digitalWrite(SCL_PIN, LOW);
 
     //now we need to take back control over the SDA line 
-    digitalWrite(SDA_PIN, OUTPUT);
+    pinMode(SDA_PIN, OUTPUT);
     digitalWrite(SDA_PIN, LOW);
     delayMicroseconds(MY_DELAY);
 
@@ -165,3 +192,8 @@ bool custom_set_voltage(uint16_t dac_value) { //function goes throught the full 
   return true;  //function worked 
 }
 
+uint16_t voltageToDACValue(float voltage) { //converts voltage to DAC value (same as in our voltage script)
+  if (voltage < 0) voltage = 0;  //voltage cant be zero so cutsoff at 0
+  if (voltage > REFERENCE_VOLTAGE) voltage = REFERENCE_VOLTAGE; //cutsoff at 5V in our case since thats our refrence voltage 
+  return(uint16_t)((voltage / REFERENCE_VOLTAGE) * DAC_MAX_VALUE); //converts voltage to a ratio and mutlpilies it time our DAC value to scale it 
+}
